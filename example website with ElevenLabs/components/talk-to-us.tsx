@@ -11,9 +11,31 @@ interface TranscriptMessage {
   timestamp: Date;
 }
 
+const MODE_CONFIG = {
+  normal: {
+    label: "Normal chat",
+    description: "Ask anything, free conversation.",
+  },
+  interview: {
+    label: "Interview mode",
+    description:
+      "System asks you questions, grades your answers, and shows fixes.",
+  },
+} as const;
+
+type ConversationMode = keyof typeof MODE_CONFIG;
+const DEFAULT_AGENT_ID =
+  process.env.NEXT_PUBLIC_ELEVENLABS_AGENT_ID || "your-agent-id";
+const INTERVIEW_AGENT_ID =
+  process.env.NEXT_PUBLIC_ELEVENLABS_INTERVIEW_AGENT_ID || DEFAULT_AGENT_ID;
+
 export function TalkToUs() {
   const [transcript, setTranscript] = useState<TranscriptMessage[]>([]);
   const [isSessionActive, setIsSessionActive] = useState(false);
+  const [mode, setMode] = useState<ConversationMode>("normal");
+  const modeEntries = Object.entries(MODE_CONFIG) as Array<
+    [ConversationMode, (typeof MODE_CONFIG)[ConversationMode]]
+  >;
 
   const conversation = useConversation({
     onConnect: () => {
@@ -54,17 +76,20 @@ export function TalkToUs() {
       // Request microphone permission
       await navigator.mediaDevices.getUserMedia({ audio: true });
 
-      // Start the conversation session
-      // Note: Replace with your actual ElevenLabs Agent ID
-      console.log(process.env.NEXT_PUBLIC_ELEVENLABS_AGENT_ID);
+      const agentId =
+        mode === "interview" ? INTERVIEW_AGENT_ID : DEFAULT_AGENT_ID;
+
       await conversation.startSession({
-        agentId: process.env.NEXT_PUBLIC_ELEVENLABS_AGENT_ID || "your-agent-id",
+        agentId,
         connectionType: "webrtc",
+        dynamicVariables: {
+          conversation_mode: mode,
+        },
       });
     } catch (error) {
       console.error("Failed to start conversation:", error);
     }
-  }, [conversation]);
+  }, [conversation, mode]);
 
   const endConversation = useCallback(async () => {
     await conversation.endSession();
@@ -73,7 +98,7 @@ export function TalkToUs() {
   return (
     <section className="py-16 bg-muted/50">
       <div className="mx-auto max-w-4xl px-6 lg:px-8">
-        <div className="text-center mb-8">
+        <div className="text-center mb-10">
           <h2 className="text-3xl font-bold text-foreground mb-4">
             Talk to Us
           </h2>
@@ -81,6 +106,34 @@ export function TalkToUs() {
             Have questions? Start a voice conversation with our AI assistant.
             Click the button below and speak naturally.
           </p>
+          <div className="mt-6 flex flex-col items-center gap-3">
+            <div className="flex rounded-full border border-border bg-background p-1">
+              {modeEntries.map(([key, config]) => (
+                <button
+                  key={key}
+                  type="button"
+                  onClick={() => setMode(key)}
+                  disabled={isSessionActive}
+                  aria-pressed={mode === key}
+                  className={`px-4 py-2 text-sm font-medium rounded-full transition-colors ${
+                    mode === key
+                      ? "bg-primary text-primary-foreground shadow-sm"
+                      : "text-muted-foreground hover:text-foreground"
+                  } ${isSessionActive ? "cursor-not-allowed opacity-70" : ""}`}
+                >
+                  {config.label}
+                </button>
+              ))}
+            </div>
+            <p className="text-sm text-muted-foreground">
+              {MODE_CONFIG[mode].description}
+            </p>
+            {isSessionActive && (
+              <p className="text-xs text-muted-foreground">
+                End the current conversation to switch modes.
+              </p>
+            )}
+          </div>
         </div>
 
         <div className="flex flex-col items-center gap-6">
